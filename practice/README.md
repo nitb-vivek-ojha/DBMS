@@ -11,7 +11,7 @@ docker-compose up
 ```
 docker ps -a
 ```
-[container-startup](/assets/container-startup.png)
+[container-startup](../assets/container-startup.png)
 5. Seed your database by running the command
 ```
 # run from project root
@@ -22,10 +22,10 @@ chmod +x /practice/migrate.sh
 ```
 docker exec -it postgres psql -U <user> -d <database-name>
 ```
-[connect-with-psql](/assets/psql.png)
+[connect-with-psql](../assets/psql.png)
 7. Handy commands
 ```
-\l (list all databases)
+\l              list all databases
 \c railway      connect to a different database
 \dt             list tables in the current schema
 \d <table>     describe a table (columns, indexes, constraints, FKs)
