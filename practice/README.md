@@ -46,18 +46,19 @@ ctrl + L        clearing screen (for windows)
 ```
 
 ### BASIC SQL COMMANDS
--- ========================== DATA MANIPULATION LANGUAGE =============================
--- EXAMPLE 1
+#### DATA MANIPULATION LANGUAGE
+```sql
+-- ====================== EXAMPLE 1  ==========================================
 INSERT INTO PERSON (id, name, dob, age)
 SELECT id, name, NULL, 'Unknown' -- static values 
 FROM customers -- all the customer entries will be inserted into table person
+```
 
+#### DATA QUERY LANGUAGE
+```sql
+-- 1. Coding Order: SELECT, DISTINCT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT & OFFSET
 
--- ========================== DATA QUERY LANGUAGE ====================================
--- a. Coding Order: SELECT, DISTINCT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT & OFFSET
-
--- b. Execution Order: FROM, WHERE, GROUP BY, HAVING, SELECT + DISTINCT, ORDER BY, LIMIT & OFFSET
--- ===================================================================================
+-- 2. Execution Order: FROM, WHERE, GROUP BY, HAVING, SELECT + DISTINCT, ORDER BY, LIMIT & OFFSET
 
 -- ====================== EXAMPLE 1  ============================
 -- a. DISTINCT applies to complete row for uniqueness
@@ -75,8 +76,8 @@ SELECT 123 AS temp_values; -- static values
 
 -- ====================== EXAMPLE 2 (GROUP BY) =================================
 -- THE COLUMNS IN SELECT COMMAND MUST OBEY ANY OF THE TWO CONDITIONS
---      1. Be included exactly as-is in the GROUP BY clause
---      2. Be wrapped inside an aggregate function (like COUNT(), SUM(), etc.)
+--      a. Be included exactly as-is in the GROUP BY clause
+--      b. Be wrapped inside an aggregate function (like COUNT(), SUM(), etc.)
 -- =============================================================================
 SELECT travel_class, COUNT(travel_class) as passenger_count
 FROM bookings
@@ -89,3 +90,6 @@ GROUP BY travel_class
 HAVING COUNT(travel_class) < 10
 ORDER BY COUNT(travel_class) DESC
 LIMIT 1;
+```
+
+
