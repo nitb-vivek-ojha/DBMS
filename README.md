@@ -323,3 +323,358 @@ INSERT INTO seat_allocations VALUES (12723, '2026-10-15', 'B1-23', 3, 7);
 -- ERROR: conflicting key value violates exclusion constraint
 ```
 
+## B] OPERATORS IN POSTGRESQL
+
+> Most examples are plain `SELECT` expressions you can run directly in psql. A few reuse the tables created in Section A (`stations`, `bookings_b`, `train_schedule`, `gateway_logs`, `login_audit`).
+
+### 1. Arithmetic
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| + | addition | `5 + 3` | 8 |
+| - | subtraction | `5 - 3` | 2 |
+| * | multiplication | `5 * 3` | 15 |
+| / | division (**integer division truncates** for integer inputs) | `7 / 2` | 3 |
+| % | modulo (remainder) | `7 % 2` | 1 |
+| ^ | exponent | `2 ^ 3` | 8 |
+| \|/ | square root | `\|/ 25` | 5 |
+| \|\|/ | cube root | `\|\|/ 27` | 3 |
+| @ | absolute value | `@ -5` | 5 |
+
+📌 NOTE
+- `7 / 2` gives `3`, not `3.5`, because both inputs are integers. Cast one side to get a decimal result: `7 / 2.0` or `7::NUMERIC / 2`.
+- The sign of `%` follows the left operand: `-7 % 3` is `-1`.
+- `^` is **left-associative** in PostgreSQL, so `2 ^ 3 ^ 2` is `(2^3)^2 = 64`, not `2^9 = 512`.
+- Unary minus binds tighter than `^`, so `-2 ^ 2` is `4`.
+- The postfix factorial operator `5 !` was removed in PostgreSQL 14. Use `factorial(5)`.
+
+```sql
+SELECT 7 / 2          AS int_division,     -- 3
+       7 / 2.0        AS decimal_division, -- 3.5000000000000000
+       7::NUMERIC / 2 AS cast_division,    -- 3.5000000000000000
+       -7 % 3         AS modulo,           -- -1
+       2 ^ 3 ^ 2      AS power,            -- 64
+       |/ 144         AS sqrt,             -- 12
+       @ -42          AS abs_value;        -- 42
+
+-- Practical: average fare per passenger without integer truncation
+SELECT 4350 / 3                    AS wrong,  -- 1450 (looks right only by luck)
+       round(4351::NUMERIC / 3, 2) AS right;  -- 1450.33
+```
+
+### 2. Bitwise
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| & | bitwise AND | `5 & 3` | 1 |
+| \| | bitwise OR | `5 \| 3` | 7 |
+| # | bitwise XOR | `5 # 3` | 6 |
+| ~ | bitwise NOT | `~ 5` | -6 |
+| << | shift left | `1 << 4` | 16 |
+| >> | shift right | `16 >> 2` | 4 |
+
+📌 NOTE
+- XOR is `#` in PostgreSQL, not `^` (which is exponent).
+- Bit flags are compact but hard to query and constrain. Prefer separate `boolean` columns unless you have a strong reason.
+
+```sql
+-- Running days as a bitmask: MON=1, TUE=2, WED=4, THU=8, FRI=16, SAT=32, SUN=64
+SELECT (1 | 4 | 16)          AS mon_wed_fri,   -- 21
+       (21 & 4) <> 0         AS runs_on_wed,   -- true
+       (21 & 8) <> 0         AS runs_on_thu;   -- false
+```
+
+### 3. Comparison
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| = | equal | `5 = 5` | true |
+| <> or != | not equal | `5 <> 3` | true |
+| < | less than | `3 < 5` | true |
+| > | greater than | `3 > 5` | false |
+| <= | less than or equal | `5 <= 5` | true |
+| >= | greater than or equal | `3 >= 5` | false |
+| BETWEEN a AND b | within range, **both ends inclusive** | `5 BETWEEN 1 AND 5` | true |
+| IS NULL / IS NOT NULL | checks for NULL | `NULL IS NULL` | true |
+| IS DISTINCT FROM | not equal, treating NULL as a normal value | `NULL IS DISTINCT FROM NULL` | false |
+| IS NOT DISTINCT FROM | equal, treating NULL as a normal value | `NULL IS NOT DISTINCT FROM NULL` | true |
+
+📌 NOTE
+- Any comparison with NULL using `=` or `<>` gives **NULL**, not true or false. `NULL = NULL` is NULL. Always use `IS NULL`.
+- `BETWEEN` includes both ends. With timestamps that is a trap: `booked_at BETWEEN '2026-10-01' AND '2026-10-31'` misses everything after midnight on the 31st. Prefer `>= start AND < next_day`.
+- `IS DISTINCT FROM` is the safe way to detect "value changed" in triggers and audits, because it handles NULLs correctly.
+
+```sql
+SELECT NULL = NULL                       AS eq,        -- NULL
+       NULL IS NULL                      AS is_null,   -- true
+       NULL IS DISTINCT FROM 5           AS distinct1, -- true
+       NULL IS DISTINCT FROM NULL        AS distinct2, -- false
+       'b' BETWEEN 'a' AND 'c'           AS str_between; -- true (works on text too)
+
+-- Safe date-range filter (half-open interval)
+SELECT * FROM bookings_b
+WHERE booked_at >= '2026-10-01'
+  AND booked_at <  '2026-11-01';
+
+-- Detect a status change, even when old or new value is NULL
+-- (inside a trigger)  IF OLD.status IS DISTINCT FROM NEW.status THEN ...
+```
+
+### 4. Logical
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| AND | true if both are true | `true AND false` | false |
+| OR | true if at least one is true | `true OR false` | true |
+| NOT | reverses the value | `NOT true` | false |
+
+Three-valued logic truth table (NULL = unknown):
+
+| a | b | a AND b | a OR b | NOT a |
+|---|---|---|---|---|
+| true | true | true | true | false |
+| true | false | false | true | false |
+| true | NULL | NULL | true | false |
+| false | NULL | false | NULL | true |
+| NULL | NULL | NULL | NULL | NULL |
+
+📌 NOTE
+- `AND` binds tighter than `OR`. `a OR b AND c` means `a OR (b AND c)`. Use parentheses to make intent clear.
+- `WHERE` keeps a row only when the condition is **true**. Rows where it is NULL are dropped, just like false.
+- `false AND NULL` is false, and `true OR NULL` is true, because the unknown value can't change the result.
+
+```sql
+-- Bug: intended "confirmed or RAC bookings on train 12723"
+SELECT * FROM bookings_b
+WHERE status = 'CONFIRMED' OR status = 'RAC' AND train_id = 12723;
+-- Actually means: CONFIRMED on ANY train, OR RAC on 12723
+
+-- Fix
+SELECT * FROM bookings_b
+WHERE (status = 'CONFIRMED' OR status = 'RAC') AND train_id = 12723;
+```
+
+### 5. String
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| \|\| | concatenation | `'HYB' \|\| '-' \|\| 'SC'` | HYB-SC |
+| LIKE | pattern match, case-sensitive (`%` = any characters, `_` = exactly one) | `'Hyderabad' LIKE 'Hyd%'` | true |
+| ILIKE | pattern match, case-insensitive (PostgreSQL-specific) | `'Hyderabad' ILIKE 'hyd%'` | true |
+| NOT LIKE / NOT ILIKE | negated pattern match | `'Pune' NOT LIKE 'H%'` | true |
+| ~ | regex match, case-sensitive | `'HYB' ~ '^[A-Z]{3}$'` | true |
+| ~* | regex match, case-insensitive | `'hyb' ~* '^[A-Z]{3}$'` | true |
+| !~ | regex does not match, case-sensitive | `'hyb' !~ '^[A-Z]+$'` | true |
+| !~* | regex does not match, case-insensitive | `'123' !~* '^[a-z]+$'` | true |
+| ^@ | starts with | `'Hyderabad' ^@ 'Hyd'` | true |
+| SIMILAR TO | SQL-standard regex (rarely used) | `'abc' SIMILAR TO '(a\|b)%'` | true |
+
+📌 NOTE
+- `||` with NULL gives NULL: `'Train ' || NULL` is NULL. Use `concat()` or `concat_ws()`, which skip NULLs.
+- `LIKE 'Hyd%'` (prefix) can use a B-tree index. `LIKE '%bad'` (leading wildcard) cannot, so it scans the whole table. For "contains" searches on large tables, look at the `pg_trgm` extension with a GIN index.
+- In `LIKE`, `_` matches one character. To match a literal `_` or `%`, escape it: `LIKE 'A\_%'`.
+- `~` is unanchored: `'XHYBX' ~ 'HYB'` is true. Use `^` and `$` to match the whole string.
+
+```sql
+SELECT 'Train ' || 12723          AS concat_num,   -- Train 12723 (number converted automatically)
+       'Train ' || NULL           AS concat_null,  -- NULL
+       concat('Train ', NULL)     AS concat_fn,    -- Train
+       concat_ws(' - ', 'HYB', NULL, 'SC') AS ws; -- HYB - SC
+
+-- Stations whose name starts with 'Sec' (case-insensitive)
+SELECT * FROM stations WHERE name ILIKE 'sec%';
+
+-- Station codes that are exactly 3 letters
+SELECT * FROM stations WHERE station_code ~ '^[A-Z]{3}$';
+
+-- Names with exactly 4 characters
+SELECT * FROM stations WHERE name LIKE '____';
+```
+
+### 6. Set membership & subquery operators
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| IN (list) | value matches any in the list | `3 IN (1, 2, 3)` | true |
+| NOT IN (list) | value matches none in the list | `4 NOT IN (1, 2, 3)` | true |
+| = ANY (array / subquery) | true if the comparison is true for at least one element | `3 = ANY(ARRAY[1,2,3])` | true |
+| > ALL (array / subquery) | true if the comparison is true for every element | `5 > ALL(ARRAY[1,2,3])` | true |
+| EXISTS (subquery) | true if the subquery returns at least one row | `EXISTS (SELECT 1)` | true |
+| NOT EXISTS (subquery) | true if the subquery returns no rows | | |
+
+📌 NOTE
+- **The NOT IN trap:** if the list or subquery contains even one NULL, `NOT IN` returns NULL for every row, so the query returns **nothing**. `5 NOT IN (1, NULL)` is NULL.
+- Prefer `NOT EXISTS` for "rows with no match in another table." It handles NULLs correctly and usually plans at least as well.
+- `ANY` works with any comparison operator (`<`, `>=`, `LIKE`, ...), not just `=`.
+- `x > ALL(empty set)` is **true**, because there is nothing to fail the condition.
+
+```sql
+SELECT 5 NOT IN (1, 2)     AS normal,     -- true
+       5 NOT IN (1, NULL)  AS null_trap;  -- NULL
+
+-- Passengers who have never made a booking
+-- Risky if bookings_b.passenger_id can be NULL:
+SELECT * FROM passengers
+WHERE passenger_id NOT IN (SELECT passenger_id FROM bookings_b);
+
+-- Safe:
+SELECT * FROM passengers p
+WHERE NOT EXISTS (SELECT 1 FROM bookings_b b WHERE b.passenger_id = p.passenger_id);
+
+-- Station name matches any of several patterns
+SELECT * FROM stations WHERE name ILIKE ANY (ARRAY['%junction', '%central', '%terminus']);
+```
+
+### 7. Date & Time
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| date + integer | add days | `'2026-10-15'::DATE + 7` | 2026-10-22 |
+| date - integer | subtract days | `'2026-10-15'::DATE - 1` | 2026-10-14 |
+| date - date | days between (integer) | `'2026-10-31'::DATE - '2026-10-15'::DATE` | 16 |
+| date + time | combine into timestamp | `'2026-10-15'::DATE + '06:15'::TIME` | 2026-10-15 06:15:00 |
+| timestamp + interval | shift by a duration | `now() + INTERVAL '2 hours'` | (2 hours from now) |
+| timestamp - timestamp | difference (interval) | `'2026-10-15 14:45'::TIMESTAMP - '2026-10-15 06:15'::TIMESTAMP` | 08:30:00 |
+| interval * number | scale a duration | `INTERVAL '15 minutes' * 4` | 01:00:00 |
+| OVERLAPS | do two time periods overlap | `(DATE '2026-10-01', DATE '2026-10-10') OVERLAPS (DATE '2026-10-05', DATE '2026-10-15')` | true |
+
+📌 NOTE
+- `date - date` returns an **integer** (days). `timestamp - timestamp` returns an **interval**.
+- Adding `INTERVAL '1 month'` is calendar-aware: `'2026-01-31'::DATE + INTERVAL '1 month'` gives `2026-02-28`.
+- `OVERLAPS` treats periods as half-open `[start, end)`, so touching end points don't overlap.
+- For stored "no overlap" rules, prefer range types with `EXCLUDE` (Section A.10) over checking `OVERLAPS` in application code.
+
+```sql
+-- Advance Reservation Period: booking opens 60 days before journey
+SELECT '2026-12-20'::DATE - 60 AS booking_opens;  -- 2026-10-21
+
+-- Arrival time from departure + duration
+SELECT journey_date + departure_time + duration AS arrival FROM journeys;
+
+-- Bookings made in the last 24 hours
+SELECT * FROM bookings_b WHERE booked_at > now() - INTERVAL '24 hours';
+
+-- Journey duration in minutes
+SELECT EXTRACT(EPOCH FROM ('2026-10-15 14:45'::TIMESTAMP - '2026-10-15 06:15'::TIMESTAMP)) / 60 AS minutes;  -- 510
+```
+
+### 8. JSONB
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| -> | get field / array element as **jsonb** | `'{"a":{"b":1}}'::jsonb -> 'a'` | {"b": 1} |
+| ->> | get field / array element as **text** | `'{"a":"x"}'::jsonb ->> 'a'` | x |
+| #> | get value at path as jsonb | `'{"a":{"b":1}}'::jsonb #> '{a,b}'` | 1 |
+| #>> | get value at path as text | `'{"a":{"b":1}}'::jsonb #>> '{a,b}'` | 1 |
+| @> | left contains right | `'{"a":1,"b":2}'::jsonb @> '{"a":1}'` | true |
+| <@ | left is contained in right | `'{"a":1}'::jsonb <@ '{"a":1,"b":2}'` | true |
+| ? | key exists | `'{"a":1}'::jsonb ? 'a'` | true |
+| ?\| | any of these keys exist | `'{"a":1}'::jsonb ?\| ARRAY['a','z']` | true |
+| ?& | all of these keys exist | `'{"a":1}'::jsonb ?& ARRAY['a','z']` | false |
+| \|\| | merge (shallow; right side wins) | `'{"a":1}'::jsonb \|\| '{"a":2,"b":3}'` | {"a": 2, "b": 3} |
+| - | remove key (or array index) | `'{"a":1,"b":2}'::jsonb - 'a'` | {"b": 2} |
+| #- | remove value at path | `'{"a":{"b":1,"c":2}}'::jsonb #- '{a,b}'` | {"a": {"c": 2}} |
+| @? | jsonpath returns any item | `'{"amt":1450}'::jsonb @? '$.amt ? (@ > 1000)'` | true |
+
+📌 NOTE
+- Use `->` to keep navigating deeper, and `->>` only at the last step when you want text.
+- `->>` always returns text, so cast before doing math or comparisons: `(payload->>'amount')::NUMERIC > 1000`. Comparing text gives alphabetical results, where `'900' > '1000'` is true.
+- `@>`, `?`, `?|`, `?&` can use a GIN index. `->>` comparisons need an expression index instead.
+- `||` merge is shallow. Nested objects are replaced, not merged.
+
+```sql
+-- Failed payments (uses GIN index from Section A.8)
+SELECT * FROM gateway_logs WHERE payload @> '{"status": "FAILED"}';
+
+-- Logs that have an error code
+SELECT * FROM gateway_logs WHERE payload ? 'error_code';
+
+-- Payments above ₹1000 (cast the text!)
+SELECT * FROM gateway_logs WHERE (payload #>> '{txn,amount}')::NUMERIC > 1000;
+
+-- Add a field without rewriting the whole payload
+UPDATE gateway_logs SET payload = payload || '{"reviewed": true}' WHERE log_id = 2;
+
+-- Remove a sensitive field
+UPDATE gateway_logs SET payload = payload - 'card_last4';
+```
+
+### 9. Array
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| @> | contains | `ARRAY['MON','WED','FRI'] @> ARRAY['MON','FRI']` | true |
+| <@ | is contained by | `ARRAY['MON'] <@ ARRAY['MON','WED']` | true |
+| && | overlap (any element in common) | `ARRAY['MON','TUE'] && ARRAY['TUE','SUN']` | true |
+| \|\| | concatenate arrays / append element | `ARRAY['MON'] \|\| 'TUE'` | {MON,TUE} |
+| = ANY() | element is in array | `'FRI' = ANY(ARRAY['MON','FRI'])` | true |
+| [n] | element at position n (**1-indexed**) | `(ARRAY['MON','WED'])[1]` | MON |
+| [m:n] | slice from m to n | `(ARRAY['A','B','C','D'])[2:3]` | {B,C} |
+
+📌 NOTE
+- `@>` and `<@` ignore order and duplicates: `ARRAY[1,1,2] @> ARRAY[2,1]` is true.
+- Out-of-range indexes return NULL, not an error.
+- `@>`, `<@`, `&&` can use a GIN index. `= ANY()` on an array column cannot.
+
+```sql
+-- Trains that run on both Saturday and Sunday
+SELECT * FROM train_schedule WHERE running_days @> ARRAY['SAT','SUN'];
+
+-- Trains that run on at least one weekend day
+SELECT * FROM train_schedule WHERE running_days && ARRAY['SAT','SUN'];
+
+-- Add a running day
+UPDATE train_schedule SET running_days = running_days || 'SUN' WHERE train_no = 12723;
+```
+
+### 10. Range
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| @> | range contains element or range | `int4range(1,10) @> 5` | true |
+| <@ | element or range is contained by | `5 <@ int4range(1,10)` | true |
+| && | overlap | `int4range(1,5) && int4range(4,8)` | true |
+| << | strictly left of | `int4range(1,3) << int4range(5,8)` | true |
+| >> | strictly right of | `int4range(5,8) >> int4range(1,3)` | true |
+| -\|- | adjacent (touching, no gap, no overlap) | `int4range(1,5) -\|- int4range(5,8)` | true |
+| + | union | `int4range(1,5) + int4range(5,8)` | [1,8) |
+| * | intersection | `int4range(1,5) * int4range(3,8)` | [3,5) |
+| - | difference | `int4range(1,8) - int4range(5,8)` | [1,5) |
+
+📌 NOTE
+- `+` errors if the result would have a gap: `int4range(1,3) + int4range(5,8)` is an error.
+- `-` errors if the result would split into two pieces.
+- `-|-` is useful for checking that segments chain together with no gaps (stop 1→5, then 5→9).
+
+```sql
+-- Does a booking from stop 2 to 6 conflict with stop 1 to 5?
+SELECT int4range(2,6) && int4range(1,5) AS conflicts;   -- true
+
+-- Which part of the journey is shared?
+SELECT int4range(2,6) * int4range(1,5) AS shared;       -- [2,5)
+
+-- Is a given date inside the festival rush period?
+SELECT daterange('2026-10-18', '2026-11-05') @> '2026-10-25'::DATE AS in_rush;  -- true
+```
+
+### 11. Type casting
+| Operator | Description | Example | Result |
+|---|---|---|---|
+| :: | PostgreSQL cast shorthand | `'123'::INTEGER` | 123 |
+| CAST(x AS type) | SQL-standard cast | `CAST('123' AS INTEGER)` | 123 |
+| type 'literal' | typed literal | `DATE '2026-10-15'` | 2026-10-15 |
+
+📌 NOTE
+- `::` and `CAST` do the same thing. `::` is shorter; `CAST` is portable to other databases.
+- `::` binds very tightly: `-5::TEXT` casts `5` first, then applies minus. Write `(-5)::TEXT`.
+- A failed cast is an error, not NULL: `'abc'::INTEGER` fails.
+- Casting a column in `WHERE` (e.g. `booked_at::DATE = '2026-10-15'`) prevents a normal index on `booked_at` from being used. Filter with a range instead.
+
+```sql
+SELECT '2026-10-15'::DATE + 1     AS next_day,
+       '1450.50'::NUMERIC(10,2)   AS fare,
+       'true'::BOOLEAN            AS flag,
+       12723::TEXT || '-HYB'      AS label;
+```
+
+📌 NOTE
+- When in doubt, use parentheses. They cost nothing and make intent obvious to the next reader.
+- Because `->>` (level 8) binds tighter than `=` (level 10), `payload->>'status' = 'FAILED'` works without parentheses. But `::` binds tighter than `->>`, so `payload->>'amount'::NUMERIC` casts the key `'amount'`, not the result. Write `(payload->>'amount')::NUMERIC`.
+
+```sql
+SELECT 2 + 3 * 4        AS a,   -- 14
+       (2 + 3) * 4      AS b,   -- 20
+       -2 ^ 2           AS c,   -- 4
+       -(2 ^ 2)         AS d,   -- -4
+       true OR false AND false AS e;  -- true (AND first)
+```
