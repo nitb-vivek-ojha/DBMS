@@ -50,8 +50,23 @@ ctrl + L        clearing screen (for windows)
 ```sql
 -- ====================== EXAMPLE 1  ==========================================
 INSERT INTO PERSON (id, name, dob, age)
+VALUES 
+    (1, "Vivek", NULL, 24),
+    (2, "Vinay", NULL, 23)
+
+-- ====================== EXAMPLE 2  ==========================================
+INSERT INTO PERSON (id, name, dob, age)
 SELECT id, name, NULL, 'Unknown' -- static values 
 FROM customers -- all the customer entries will be inserted into table person
+
+-- ====================== EXAMPLE 3  ==========================================
+UPDATE person
+SET
+    name = "X",
+    age = 25
+
+WHERE id = 10; -- use WHERE clause to avoid updating all rows unintentionally
+
 ```
 
 #### DATA QUERY LANGUAGE
@@ -59,6 +74,13 @@ FROM customers -- all the customer entries will be inserted into table person
 -- 1. Coding Order: SELECT, DISTINCT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT & OFFSET
 
 -- 2. Execution Order: FROM, WHERE, GROUP BY, HAVING, SELECT + DISTINCT, ORDER BY, LIMIT & OFFSET
+
+-- 3. Operators 
+--    a. Comparison: =, != or <>, <, <=, >, >=
+--    b. Logical: AND, OR, NOT
+--    c. Pattern Matching: LIKE, ILIKE, POSIX (~)
+--    d. Set/Range: IN, BETWEEN (inclusive), EXISTS 
+--    e. Null Checks: IS NULL, IS NOT NULL
 
 -- ====================== EXAMPLE 1  ============================
 -- a. DISTINCT applies to complete row for uniqueness
@@ -90,6 +112,76 @@ GROUP BY travel_class
 HAVING COUNT(travel_class) < 10
 ORDER BY COUNT(travel_class) DESC
 LIMIT 1;
+
+-- ====================== EXAMPLE 3 (JOINS) =================================
+-- INNER JOIN, LEFT JOIN, RIGHT JOIN, FULL JOIN
+-- LEFT ANTI JOIN, RIGHT ANTI JOIN, FULL ANTI JOIN
+-- =============================================================================
+
+SELECT c.id, c.name, o.orderid
+FROM customer AS c
+INNER JOIN order as o -- order of table does not matter in INNER JOIN
+ON c.id = o.id
+
+SELECT c.id, c.name, o.orderid
+FROM customer as c
+LEFT JOIN order as o -- order of table matters here (left table)A-B(right table)
+ON c.id = o.id
+
+SELECT c.id, c.name, o.orderid
+FROM customer as c
+RIGHT JOIN order as o -- order of table matters here (left table)A-B(right table)
+ON c.id = o.id -- same result can be achieved by flipping the order of table and join type
+
+SELECT c.id, c.name, o.orderid
+FROM customer as c -- order does not matter here
+FULL JOIN order as o -- db will take every row from left table and try to match id in the right table. If id matches data from right will be added otherwise null will be added. The same is performed from right side.
+ON c.id = o.id
+
+-- ============================== ANTI JOINS ==================================
+
+SELECT *
+FROM customer AS c
+LEFT JOIN order AS o
+ON c.id = o.id
+WHERE o.customerid = NULL -- LEFT ANTI JOIN (right key is null)
+
+SELECT *
+FROM customer AS c
+RIGHT JOIN order AS o
+ON o.id = c.id
+WHERE c.id = NULL -- RIGHT ANTI JOIN (left key is null)
+
+SELECT *
+FROM customer AS c
+LEFT JOIN order AS o
+ON c.id = o.id
+WHERE o.customerid = NULL OR c.id = NULL -- FULL ANTI JOIN
+
+-- QUESTION: Condition to apply a JOIN ?
+-- 1. Normally to extract meaningful data from join the two tables must share a relation. A typical join condition pairs a foreign key from one table with its corresponding primary key in another table.
+
+-- 2. You can still apply a JOIN even if the tables are unrelated. The resulting output will be a cartesian product (every single row of the first table with every single row of the second table)
+
+SELECT * 
+FROM Users 
+JOIN Products ON 1=1;
+
+-- QUESTION: does a join yield more than one matching column ?
+-- Yes
+/*
+Users
+    UserID: 1 | Name: Alice
+
+Orders
+    OrderID: 101 | UserID: 1 | Item: Laptop
+    OrderID: 102 | UserID: 1 | Item: Mouse
+*/
+
+SELECT *
+FROM Users as u
+LEFT JOIN Orders as o
+ON u.UserID = 0.UserID
 ```
 
 
