@@ -158,6 +158,12 @@ LEFT JOIN order AS o
 ON c.id = o.id
 WHERE o.customerid = NULL OR c.id = NULL -- FULL ANTI JOIN
 
+-- ============================ CROSS JOIN ==================================
+SELECT *
+FROM customer
+CROSS JOIN order
+-- ==========================================================================
+
 -- QUESTION: Condition to apply a JOIN ?
 -- 1. Normally to extract meaningful data from join the two tables must share a relation. A typical join condition pairs a foreign key from one table with its corresponding primary key in another table.
 
