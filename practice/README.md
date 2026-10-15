@@ -161,13 +161,13 @@ WHERE o.customerid = NULL OR c.id = NULL -- FULL ANTI JOIN
 -- ============================ CROSS JOIN ==================================
 SELECT *
 FROM customer
-CROSS JOIN order
+CROSS JOIN order -- every record from customer will be mapped to every record of order
 -- ==========================================================================
 
 -- QUESTION: Condition to apply a JOIN ?
 -- 1. Normally to extract meaningful data from join the two tables must share a relation. A typical join condition pairs a foreign key from one table with its corresponding primary key in another table.
 
--- 2. You can still apply a JOIN even if the tables are unrelated. The resulting output will be a cartesian product (every single row of the first table with every single row of the second table)
+-- 2. You can still apply a JOIN even if the tables are unrelated. The resulting output will be a cartesian product (every single row of the first table mapped with every single row of the second table)
 
 SELECT * 
 FROM Users 
@@ -187,7 +187,7 @@ Orders
 SELECT *
 FROM Users as u
 LEFT JOIN Orders as o
-ON u.UserID = 0.UserID
+ON u.UserID = o.UserID
 ```
 
 
