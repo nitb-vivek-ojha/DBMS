@@ -101,12 +101,12 @@ INNER JOIN passenger AS p
 ON b.passenger_id = p.passenger_id
 
 /*
-   pnr   | passenger_id | train_no |  fare   | passenger_id | name  |  city  
----------+--------------+----------+---------+--------------+-------+--------
- PNR1001 |            1 | 12951    | 3200.00 |            1 | Aarav | Delhi
- PNR1002 |            1 | 12953    | 2900.00 |            1 | Aarav | Delhi
- PNR1003 |            2 | 12909    | 1800.00 |            2 | Diya  | Mumbai
- PNR1004 |            3 | 12951    | 2600.00 |            3 | Kabir | Delhi
+   pnr   | passenger_id | train_no | from_stn | to_stn |  fare   | passenger_id | name  |  city  
+---------+--------------+----------+----------+--------+---------+--------------+-------+--------
+ PNR1001 |            1 | 12951    | BCT      | NDLS   | 3200.00 |            1 | Aarav | Delhi
+ PNR1002 |            1 | 12953    | ST       | NZM    | 2900.00 |            1 | Aarav | Delhi
+ PNR1003 |            2 | 12909    | BDTS     | NZM    | 1800.00 |            2 | Diya  | Mumbai
+ PNR1004 |            3 | 12951    | BRC      | NDLS   | 2600.00 |            3 | Kabir | Delhi
 
 */
 ```
