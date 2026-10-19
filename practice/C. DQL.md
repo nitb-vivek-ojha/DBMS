@@ -102,7 +102,6 @@ WHERE (status = 'CONFIRMED' OR status = 'RAC') AND train_id = 12723;
 | !~ | regex does not match, case-sensitive | `'hyb' !~ '^[A-Z]+$'` | true |
 | !~* | regex does not match, case-insensitive | `'123' !~* '^[a-z]+$'` | true |
 | ^@ | starts with | `'Hyderabad' ^@ 'Hyd'` | true |
-| SIMILAR TO | SQL-standard regex (rarely used) | `'abc' SIMILAR TO '(a\|b)%'` | true |
 
 📌 NOTE
 - `||` with NULL gives NULL: `'Train ' || NULL` is NULL. Use `concat()` or `concat_ws()`, which skip NULLs.
