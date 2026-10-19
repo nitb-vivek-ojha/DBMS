@@ -46,27 +46,11 @@ SELECT 4350 / 3                    AS wrong,  -- 1450 (looks right only by luck)
 | >= | greater than or equal | `3 >= 5` | false |
 | BETWEEN a AND b | within range, **both ends inclusive** | `5 BETWEEN 1 AND 5` | true |
 | IS NULL / IS NOT NULL | checks for NULL | `NULL IS NULL` | true |
-| IS DISTINCT FROM | not equal, treating NULL as a normal value | `NULL IS DISTINCT FROM NULL` | false |
-| IS NOT DISTINCT FROM | equal, treating NULL as a normal value | `NULL IS NOT DISTINCT FROM NULL` | true |
 
 📌 NOTE
 - Any comparison with NULL using `=` or `<>` gives **NULL**, not true or false. `NULL = NULL` is NULL. Always use `IS NULL`.
 - `BETWEEN` includes both ends. With timestamps that is a trap: `booked_at BETWEEN '2026-10-01' AND '2026-10-31'` misses everything after midnight on the 31st. Prefer `>= start AND < next_day`.
-- `IS DISTINCT FROM` is the safe way to detect "value changed" in triggers and audits, because it handles NULLs correctly.
 
-```sql
-SELECT NULL = NULL                       AS eq,        -- NULL
-       NULL IS NULL                      AS is_null,   -- true
-       NULL IS DISTINCT FROM 5           AS distinct1, -- true
-       NULL IS DISTINCT FROM NULL        AS distinct2, -- false
-       'b' BETWEEN 'a' AND 'c'           AS str_between; -- true (works on text too)
-
--- Safe date-range filter (half-open interval)
-SELECT * FROM bookings_b
-WHERE booked_at >= '2026-10-01'
-  AND booked_at <  '2026-11-01';
-
-```
 
 #### 3. Logical
 | Operator | Description | Example | Result |
